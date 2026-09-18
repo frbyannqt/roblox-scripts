@@ -289,12 +289,36 @@ VisualsTab:AddDropdown({
     end
 })
 
--- 13. ===== INFINITE JUMP (REVISI) =====
--- Pakai ContextActionService biar ke-detect di semua platform,
--- termasuk tombol jump bawaan di mobile (Delta).
-local function onJumpAction(actionName, inputState, inputObject)
+-- 13. ===== INFINITE JUMP (MOBILE-FIXED) =====
+local jumpHeld = false
+
+-- Deteksi kalau tombol jump (mobile atau PC) ditahan
+track(UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
     if isShutdown or not infJumpEnabled then return end
-    if inputState ~= Enum.UserInputState.Begin then return end
+
+    -- Cek input jump dari touch (mobile) atau Space (PC)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        -- Cek apakah yang disentuh itu tombol jump bawaan Roblox
+        if input.KeyCode == Enum.KeyCode.ButtonA or input.KeyCode == Enum.KeyCode.Space then
+            jumpHeld = true
+        end
+    elseif input.KeyCode == Enum.KeyCode.Space then
+        jumpHeld = true
+    end
+end))
+
+track(UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch then
+        jumpHeld = false
+    elseif input.KeyCode == Enum.KeyCode.Space then
+        jumpHeld = false
+    end
+end))
+
+-- Loop utama: selama tombol ditahan, paksa Humanoid masuk state Jumping
+track(RunService.RenderStepped:Connect(function()
+    if isShutdown or not infJumpEnabled or not jumpHeld then return end
 
     local char = LocalPlayer.Character
     if not char then return end
@@ -303,10 +327,7 @@ local function onJumpAction(actionName, inputState, inputObject)
     if hum and hum.Health > 0 then
         hum:ChangeState(Enum.HumanoidStateType.Jumping)
     end
-end
-
--- Bind ke aksi CharacterJump bawaan Roblox
-CAS:BindAction("BianInfiniteJump", onJumpAction, false, Enum.PlayerActions.CharacterJump)
+end))
 
 MiscTab:AddToggle({
     Name = "Infinite Jump",
