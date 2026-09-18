@@ -68,26 +68,6 @@ local scripts = {
     {
         name = "6locc / ViolenceDistrict.lua",
         url = "https://raw.githubusercontent.com/lixxWW/ViolenceDistrict/refs/heads/main/ViolenceDistrict.lua"
-    },
-    {
-        name = "claudeware / VD.lua",
-        url = "https://raw.githubusercontent.com/Claudeware/VD/refs/heads/main/VD.lua"
-    },
-    {
-        name = "717exe Hub",
-        url = "https://raw.githubusercontent.com/arcadeisreal/717exe_Violence_District/refs/heads/main/loader.lua"
-    },
-    {
-        name = "Violence Disterect Hub (Hendar)",
-        url = "https://raw.githubusercontent.com/collectorhenfi-wq/Hendarscriptt/refs/heads/main/VDBYHENDAR.txt"
-    },
-    {
-        name = "ANCH Hub",
-        url = "https://raw.githubusercontent.com/ayamnubchh/Violence-District-Roblox-Script/main/ANCH-Hax.lua"
-    },
-    {
-        name = "H4x Scripts",
-        url = "https://h4xscripts.xyz/loader"
     }
 }
 
