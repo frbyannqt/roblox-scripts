@@ -10,25 +10,54 @@ local Window = OrionLib:MakeWindow({
     IntroEnabled = false
 })
 
--- 3. Perkecil window + aktifin drag manual
+-- 3. Perkecil window + drag support (PC & Mobile)
 task.spawn(function()
-    task.wait(0.2)
+    task.wait(0.3)
+    local UIS = game:GetService("UserInputService")
     local CoreGui = game:GetService("CoreGui")
+
+    -- Cari GUI Orion
     local orionGui = CoreGui:FindFirstChild("Orion")
     if not orionGui then return end
 
-    local Main = orionGui:FindFirstChild("Main")
+    -- Cari frame Main (bisa nested)
+    local Main
+    for _, v in pairs(orionGui:GetDescendants()) do
+        if v:IsA("Frame") and v.Name == "Main" then
+            Main = v
+            break
+        end
+    end
     if not Main then return end
 
-    -- Perkecil ukuran window
+    -- Perkecil window
     Main.Size = UDim2.new(0, 460, 0, 300)
 
-    -- Drag system (biar pasti bisa digeser-geser)
-    local UIS = game:GetService("UserInputService")
-    local topbar = Main:FindFirstChild("Topbar")
+    -- Cari topbar buat drag area
+    local topbar
+    for _, v in pairs(Main:GetDescendants()) do
+        if (v:IsA("Frame") or v:IsA("TextButton")) and v.Name == "Topbar" then
+            topbar = v
+            break
+        end
+    end
     if not topbar then return end
 
-    local dragging, dragInput, dragStart, startPos
+    topbar.Active = true
+
+    -- ===== DRAG HANDLER (PC + Mobile) =====
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    local function updateDrag(input)
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
 
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -54,25 +83,25 @@ task.spawn(function()
 
     UIS.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            Main.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
+            updateDrag(input)
         end
     end)
 end)
 
--- 4. Buat Tab "Visuals"
+-- 4. Buat Tab
 local VisualsTab = Window:MakeTab({
     Name = "Visuals",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
 
--- 5. Variabel Penampung
+local MiscTab = Window:MakeTab({
+    Name = "Misc",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+-- 5. Variabel
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -80,13 +109,23 @@ local Camera = workspace.CurrentCamera
 
 local espEnabled = false
 local lineEnabled = false
-local espCache = {}   -- Highlight per player
-local lineCache = {}  -- Drawing Line per player
+local espCache = {}
+local lineCache = {}
+local connections = {}     -- nyimpen semua koneksi biar bisa di-disconnect
+local isShutdown = false   -- guard biar shutdown cuma jalan sekali
 
--- 6. Fungsi Inti ESP Highlight
+-- Helper buat track koneksi
+local function track(conn)
+    table.insert(connections, conn)
+    return conn
+end
+
+-- 6. Fungsi ESP Highlight
 local function applyESP(player)
+    if isShutdown then return end
     if player == LocalPlayer then return end
     if player.UserId == LocalPlayer.UserId then return end
+    if espCache[player] then return end
 
     local character = player.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
@@ -106,7 +145,7 @@ end
 
 local function removeESP(player)
     if espCache[player] then
-        espCache[player]:Destroy()
+        pcall(function() espCache[player]:Destroy() end)
         espCache[player] = nil
     end
 end
@@ -125,13 +164,15 @@ end
 
 local function removeLine(player)
     if lineCache[player] then
-        lineCache[player]:Remove()
+        pcall(function() lineCache[player]:Remove() end)
         lineCache[player] = nil
     end
 end
 
 -- 8. Loop Update ESP
-RunService.RenderStepped:Connect(function()
+track(RunService.RenderStepped:Connect(function()
+    if isShutdown then return end
+
     -- ESP Highlight
     if espEnabled then
         for _, player in ipairs(Players:GetPlayers()) do
@@ -172,20 +213,20 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
-end)
+end))
 
--- 9. Handle player join / leave
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
+-- 9. Player Join / Leave
+track(Players.PlayerAdded:Connect(function(player)
+    track(player.CharacterAdded:Connect(function()
         task.wait(0.5)
-        if espEnabled then applyESP(player) end
-    end)
-end)
+        if espEnabled and not isShutdown then applyESP(player) end
+    end))
+end))
 
-Players.PlayerRemoving:Connect(function(player)
+track(Players.PlayerRemoving:Connect(function(player)
     removeESP(player)
     removeLine(player)
-end)
+end))
 
 -- 10. Toggle ESP Highlight
 VisualsTab:AddToggle({
@@ -194,26 +235,19 @@ VisualsTab:AddToggle({
     Save = true,
     Flag = "ESP_Toggle",
     Callback = function(state)
+        if isShutdown then return end
         espEnabled = state
 
         if state then
             for _, player in ipairs(Players:GetPlayers()) do
                 applyESP(player)
             end
-            OrionLib:MakeNotification({
-                Name = "ESP",
-                Content = "ESP Highlight Aktif!",
-                Time = 3
-            })
+            OrionLib:MakeNotification({Name = "ESP", Content = "ESP Highlight Aktif!", Time = 3})
         else
             for player, _ in pairs(espCache) do
                 removeESP(player)
             end
-            OrionLib:MakeNotification({
-                Name = "ESP",
-                Content = "ESP Highlight Nonaktif.",
-                Time = 3
-            })
+            OrionLib:MakeNotification({Name = "ESP", Content = "ESP Highlight Nonaktif.", Time = 3})
         end
     end
 })
@@ -225,24 +259,83 @@ VisualsTab:AddToggle({
     Save = true,
     Flag = "Line_Toggle",
     Callback = function(state)
+        if isShutdown then return end
         lineEnabled = state
 
         if state then
-            OrionLib:MakeNotification({
-                Name = "ESP",
-                Content = "ESP Line Aktif!",
-                Time = 3
-            })
+            OrionLib:MakeNotification({Name = "ESP", Content = "ESP Line Aktif!", Time = 3})
         else
-            -- Sembunyiin semua line
             for _, line in pairs(lineCache) do
                 line.Visible = false
             end
-            OrionLib:MakeNotification({
-                Name = "ESP",
-                Content = "ESP Line Nonaktif.",
-                Time = 3
-            })
+            OrionLib:MakeNotification({Name = "ESP", Content = "ESP Line Nonaktif.", Time = 3})
         end
     end
 })
+
+-- 12. ===== SHUTDOWN FUNCTION =====
+local function shutdown()
+    if isShutdown then return end
+    isShutdown = true
+
+    -- Matiin fitur
+    espEnabled = false
+    lineEnabled = false
+
+    -- Hapus semua highlight
+    for player, hl in pairs(espCache) do
+        pcall(function() if hl then hl:Destroy() end end)
+    end
+    espCache = {}
+
+    -- Hapus semua drawing line
+    for player, line in pairs(lineCache) do
+        pcall(function() if line then line:Remove() end end)
+    end
+    lineCache = {}
+
+    -- Disconnect semua koneksi
+    for _, conn in ipairs(connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    connections = {}
+
+    -- Hancurin GUI Orion
+    pcall(function()
+        if OrionLib and OrionLib.Destroy then
+            OrionLib:Destroy()
+        end
+    end)
+
+    -- Fallback: kalau Destroy() nggak jalan, hapus manual dari CoreGui
+    pcall(function()
+        local CoreGui = game:GetService("CoreGui")
+        local orionGui = CoreGui:FindFirstChild("Orion")
+        if orionGui then orionGui:Destroy() end
+    end)
+
+    print("[Bian Script] Shutdown selesai. Semua fitur dimatikan & GUI dihapus.")
+end
+
+-- 13. Tombol Shutdown di tab Misc
+MiscTab:AddButton({
+    Name = "🛑 Shutdown (Matikan Semua)",
+    Callback = function()
+        OrionLib:MakeNotification({
+            Name = "Shutdown",
+            Content = "Mematikan semua fitur...",
+            Time = 2
+        })
+        task.wait(0.3)
+        shutdown()
+    end
+})
+
+-- 14. Keybind opsional (PC) — tekan tombol End buat shutdown
+local UIS = game:GetService("UserInputService")
+track(UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.End then
+        shutdown()
+    end
+end))
