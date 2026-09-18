@@ -20,7 +20,13 @@ local Camera      = workspace.CurrentCamera
 -- =====================================================================
 -- SECTION 2: LOAD ORION
 -- =====================================================================
-local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
+local ok, OrionLib = pcall(function()
+    return loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
+end)
+if not ok or not OrionLib then
+    warn("[Bian Script] Gagal load Orion: " .. tostring(OrionLib))
+    return
+end
 
 local Window = OrionLib:MakeWindow({
     Name = "Bian Script",
@@ -31,7 +37,7 @@ local Window = OrionLib:MakeWindow({
 })
 
 -- =====================================================================
--- SECTION 3: WINDOW RESIZE + DRAG (MOBILE & PC)
+-- SECTION 3: WINDOW RESIZE + DRAG
 -- =====================================================================
 task.spawn(function()
     task.wait(0.3)
@@ -40,7 +46,10 @@ task.spawn(function()
 
     local Main
     for _, v in pairs(orionGui:GetDescendants()) do
-        if v:IsA("Frame") and v.Name == "Main" then Main = v break end
+        if v:IsA("Frame") and v.Name == "Main" then
+            Main = v
+            break
+        end
     end
     if not Main then return end
 
@@ -49,7 +58,8 @@ task.spawn(function()
     local topbar
     for _, v in pairs(Main:GetDescendants()) do
         if (v:IsA("Frame") or v:IsA("TextButton")) and v.Name == "Topbar" then
-            topbar = v break
+            topbar = v
+            break
         end
     end
     if not topbar then return end
@@ -64,7 +74,9 @@ task.spawn(function()
             dragStart = input.Position
             startPos = Main.Position
             input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
             end)
         end
     end)
@@ -97,29 +109,34 @@ local MiscTab    = Window:MakeTab({ Name = "Misc",    Icon = "rbxassetid://44833
 -- =====================================================================
 -- SECTION 5: STATE & TRACKING
 -- =====================================================================
--- ESP state
-local espEnabled, lineEnabled, nameEnabled = false, false, false
-local linePosition = "Bottom"
+local espEnabled    = false
+local lineEnabled   = false
+local nameEnabled   = false
+local linePosition  = "Bottom"
 
--- Player mod state
-local walkSpeedEnabled, walkSpeedValue = false, 16
-local jumpPowerEnabled, jumpPowerValue = false, 50
-local infJumpEnabled = false
-local noclipEnabled  = false
-local flyEnabled     = false
-local flySpeed       = 50
+local walkSpeedEnabled = false
+local walkSpeedValue   = 16
+local jumpPowerEnabled = false
+local jumpPowerValue   = 50
+local infJumpEnabled   = false
+local noclipEnabled    = false
+local flyEnabled       = false
+local flySpeed         = 50
 
--- Misc state
 local antiAfkEnabled    = false
 local fullbrightEnabled = false
 local infStaminaEnabled = false
 local infStaminaValue   = 1000000
 
--- Teleport state
-local spectateTarget = nil
+local spectateTarget   = nil
+local teleportEnabled  = false
+local teleportPanel    = nil
+local teleportConns    = {}
+local teleportToggleRef = nil
 
--- Cache & connections
-local espCache, nameCache, lineCache = {}, {}, {}
+local espCache  = {}
+local nameCache = {}
+local lineCache = {}
 local connections = {}
 local isShutdown  = false
 
@@ -221,7 +238,6 @@ end
 track(RunService.RenderStepped:Connect(function()
     if isShutdown then return end
 
-    -- ESP Highlight
     if espEnabled then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer then
@@ -234,7 +250,6 @@ track(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- ESP Name
     if nameEnabled then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer then
@@ -247,11 +262,13 @@ track(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- ESP Line
     if lineEnabled then
-        local origin = (linePosition == "Top")
-            and Vector2.new(Camera.ViewportSize.X / 2, 0)
-            or  Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+        local origin
+        if linePosition == "Top" then
+            origin = Vector2.new(Camera.ViewportSize.X / 2, 0)
+        else
+            origin = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+        end
 
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
@@ -274,7 +291,7 @@ track(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Spectate: re-set camera subject kalau target respawn
+    -- Spectate: pastiin kamera tetep nge-follow target
     if spectateTarget and spectateTarget.Character then
         local hum = spectateTarget.Character:FindFirstChildOfClass("Humanoid")
         if hum and Camera.CameraSubject ~= hum then
@@ -305,22 +322,22 @@ end))
 -- SECTION 11: VISUALS TAB
 -- =====================================================================
 VisualsTab:AddToggle({
-    Name = "ESP Highlight", Default = false, Save = true, Flag = "ESP_Toggle",
+    Name = "ESP Highlight",
+    Default = false, Save = true, Flag = "ESP_Toggle",
     Callback = function(state)
         if isShutdown then return end
         espEnabled = state
         if state then
             for _, p in ipairs(Players:GetPlayers()) do applyESP(p) end
-            OrionLib:MakeNotification({Name="ESP", Content="ESP Highlight Aktif!", Time=3})
         else
             for p, _ in pairs(espCache) do removeESP(p) end
-            OrionLib:MakeNotification({Name="ESP", Content="ESP Highlight Nonaktif.", Time=3})
         end
     end
 })
 
 VisualsTab:AddToggle({
-    Name = "ESP Name", Default = false, Save = true, Flag = "Name_Toggle",
+    Name = "ESP Name",
+    Default = false, Save = true, Flag = "Name_Toggle",
     Callback = function(state)
         if isShutdown then return end
         nameEnabled = state
@@ -333,7 +350,8 @@ VisualsTab:AddToggle({
 })
 
 VisualsTab:AddToggle({
-    Name = "ESP Line (Tracer)", Default = false, Save = true, Flag = "Line_Toggle",
+    Name = "ESP Line (Tracer)",
+    Default = false, Save = true, Flag = "Line_Toggle",
     Callback = function(state)
         if isShutdown then return end
         lineEnabled = state
@@ -344,7 +362,8 @@ VisualsTab:AddToggle({
 })
 
 VisualsTab:AddDropdown({
-    Name = "Line Position", Default = "Bottom", Options = {"Bottom", "Top"},
+    Name = "Line Position",
+    Default = "Bottom", Options = {"Bottom", "Top"},
     Save = true, Flag = "Line_Pos",
     Callback = function(value)
         if isShutdown then return end
@@ -353,7 +372,7 @@ VisualsTab:AddDropdown({
 })
 
 -- =====================================================================
--- SECTION 12: PLAYER TAB - WALKSPEED & JUMPPOWER
+-- SECTION 12: WALKSPEED & JUMPPOWER
 -- =====================================================================
 local function applyWalkSpeed()
     local char = LocalPlayer.Character
@@ -380,8 +399,10 @@ track(LocalPlayer.CharacterAdded:Connect(function()
 end))
 
 PlayerTab:AddSlider({
-    Name = "WalkSpeed (Slider - PC)", Min = 16, Max = 200, Default = 16,
-    Color = Color3.fromRGB(255,255,255), Increment = 1, ValueName = "studs", Flag = "WS_Slider",
+    Name = "WalkSpeed (Slider - PC)",
+    Min = 16, Max = 200, Default = 16,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1, ValueName = "studs", Flag = "WS_Slider",
     Callback = function(value)
         if isShutdown then return end
         walkSpeedValue = value
@@ -390,7 +411,8 @@ PlayerTab:AddSlider({
 })
 
 PlayerTab:AddTextbox({
-    Name = "WalkSpeed (Input - Mobile)", Default = "16", TextDisappear = false,
+    Name = "WalkSpeed (Input - Mobile)",
+    Default = "16",
     Callback = function(text)
         if isShutdown then return end
         local num = tonumber(text)
@@ -402,7 +424,8 @@ PlayerTab:AddTextbox({
 })
 
 PlayerTab:AddToggle({
-    Name = "Enable WalkSpeed", Default = false, Save = true, Flag = "WS_Toggle",
+    Name = "Enable WalkSpeed",
+    Default = false, Save = true, Flag = "WS_Toggle",
     Callback = function(state)
         if isShutdown then return end
         walkSpeedEnabled = state
@@ -411,8 +434,10 @@ PlayerTab:AddToggle({
 })
 
 PlayerTab:AddSlider({
-    Name = "JumpPower (Slider - PC)", Min = 50, Max = 300, Default = 50,
-    Color = Color3.fromRGB(255,255,255), Increment = 1, ValueName = "power", Flag = "JP_Slider",
+    Name = "JumpPower (Slider - PC)",
+    Min = 50, Max = 300, Default = 50,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1, ValueName = "power", Flag = "JP_Slider",
     Callback = function(value)
         if isShutdown then return end
         jumpPowerValue = value
@@ -421,7 +446,8 @@ PlayerTab:AddSlider({
 })
 
 PlayerTab:AddTextbox({
-    Name = "JumpPower (Input - Mobile)", Default = "50", TextDisappear = false,
+    Name = "JumpPower (Input - Mobile)",
+    Default = "50",
     Callback = function(text)
         if isShutdown then return end
         local num = tonumber(text)
@@ -433,7 +459,8 @@ PlayerTab:AddTextbox({
 })
 
 PlayerTab:AddToggle({
-    Name = "Enable JumpPower", Default = false, Save = true, Flag = "JP_Toggle",
+    Name = "Enable JumpPower",
+    Default = false, Save = true, Flag = "JP_Toggle",
     Callback = function(state)
         if isShutdown then return end
         jumpPowerEnabled = state
@@ -442,7 +469,7 @@ PlayerTab:AddToggle({
 })
 
 -- =====================================================================
--- SECTION 13: PLAYER TAB - INFINITE STAMINA
+-- SECTION 13: INFINITE STAMINA
 -- =====================================================================
 local function findStaminaValue()
     local data = LocalPlayer:FindFirstChild("Data")
@@ -465,7 +492,8 @@ track(RunService.Heartbeat:Connect(function()
 end))
 
 PlayerTab:AddToggle({
-    Name = "Infinite Stamina", Default = false, Save = true, Flag = "Stamina_Toggle",
+    Name = "Infinite Stamina",
+    Default = false, Save = true, Flag = "Stamina_Toggle",
     Callback = function(state)
         if isShutdown then return end
         infStaminaEnabled = state
@@ -473,7 +501,7 @@ PlayerTab:AddToggle({
 })
 
 -- =====================================================================
--- SECTION 14: PLAYER TAB - NOCLIP
+-- SECTION 14: NOCLIP
 -- =====================================================================
 local function setCollide(state)
     local char = LocalPlayer.Character
@@ -489,21 +517,17 @@ track(RunService.Stepped:Connect(function()
 end))
 
 PlayerTab:AddToggle({
-    Name = "Noclip", Default = false, Save = true, Flag = "Noclip_Toggle",
+    Name = "Noclip",
+    Default = false, Save = true, Flag = "Noclip_Toggle",
     Callback = function(state)
         if isShutdown then return end
         noclipEnabled = state
         if not state then setCollide(true) end
-        OrionLib:MakeNotification({
-            Name = "Player",
-            Content = state and "Noclip Aktif!" or "Noclip Nonaktif.",
-            Time = 3
-        })
     end
 })
 
 -- =====================================================================
--- SECTION 15: PLAYER TAB - FLY
+-- SECTION 15: FLY
 -- =====================================================================
 local flyVelocity, flyGyro
 
@@ -550,12 +574,9 @@ track(RunService.RenderStepped:Connect(function()
     local hum = hrp.Parent:FindFirstChildOfClass("Humanoid")
     local velocity = Vector3.zero
 
-    -- Horizontal: WASD (PC) atau joystick (mobile) via MoveDirection
     if hum and hum.MoveDirection.Magnitude > 0 then
         velocity = hum.MoveDirection * flySpeed
     end
-
-    -- Vertical (PC): Space naik, Shift/Ctrl turun
     if UIS:IsKeyDown(Enum.KeyCode.Space) then
         velocity = velocity + Vector3.new(0, flySpeed, 0)
     end
@@ -567,7 +588,6 @@ track(RunService.RenderStepped:Connect(function()
     flyGyro.CFrame = CFrame.new(hrp.Position, hrp.Position + Camera.CFrame.LookVector)
 end))
 
--- Kalau karakter respawn pas fly aktif, restart fly-nya
 track(LocalPlayer.CharacterAdded:Connect(function()
     task.wait(0.5)
     if isShutdown then return end
@@ -578,8 +598,10 @@ track(LocalPlayer.CharacterAdded:Connect(function()
 end))
 
 PlayerTab:AddSlider({
-    Name = "Fly Speed", Min = 10, Max = 300, Default = 50,
-    Color = Color3.fromRGB(255,255,255), Increment = 5, ValueName = "speed", Flag = "Fly_Speed",
+    Name = "Fly Speed",
+    Min = 10, Max = 300, Default = 50,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 5, ValueName = "speed", Flag = "Fly_Speed",
     Callback = function(value)
         if isShutdown then return end
         flySpeed = value
@@ -587,71 +609,18 @@ PlayerTab:AddSlider({
 })
 
 PlayerTab:AddToggle({
-    Name = "Fly", Default = false, Save = true, Flag = "Fly_Toggle",
+    Name = "Fly",
+    Default = false, Save = true, Flag = "Fly_Toggle",
     Callback = function(state)
         if isShutdown then return end
         flyEnabled = state
-        if state then
-            startFly()
-            OrionLib:MakeNotification({Name="Player", Content="Fly Aktif! (Arah: lihat kamera, Space/Shift naik-turun)", Time=5})
-        else
-            stopFly()
-            OrionLib:MakeNotification({Name="Player", Content="Fly Nonaktif.", Time=3})
-        end
+        if state then startFly() else stopFly() end
     end
 })
 
 -- =====================================================================
--- SECTION 16: PLAYER TAB - TELEPORT / SPECTATE
+-- SECTION 16: TELEPORT / SPECTATE FLOATING PANEL
 -- =====================================================================
-local function getPlayerNames()
-    local names = {"-- Pilih Player --"}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then table.insert(names, p.Name) end
-    end
-    return names
-end
-
-local playerDropdown
-playerDropdown = PlayerTab:AddDropdown({
-    Name = "Select Player",
-    Default = "-- Pilih Player --",
-    Options = getPlayerNames(),
-    Flag = "TP_Target",
-    Callback = function(value)
-        if isShutdown then return end
-        if value == "-- Pilih Player --" then
-            spectateTarget = nil
-        else
-            spectateTarget = Players:FindFirstChild(value)
-        end
-    end
-})
-
-local function refreshPlayerDropdown()
-    if isShutdown or not playerDropdown then return end
-    pcall(function() playerDropdown:Refresh(getPlayerNames(), true) end)
-end
-
-track(Players.PlayerAdded:Connect(function()
-    task.wait(0.2)
-    refreshPlayerDropdown()
-end))
-
-track(Players.PlayerRemoving:Connect(function()
-    task.wait(0.2)
-    refreshPlayerDropdown()
-end))
-
-local function startSpectate(player)
-    if not player or not player.Character then return end
-    local hum = player.Character:FindFirstChildOfClass("Humanoid")
-    if hum then
-        Camera.CameraSubject = hum
-        spectateTarget = player
-    end
-end
-
 local function stopSpectate()
     local char = LocalPlayer.Character
     if char then
@@ -661,51 +630,303 @@ local function stopSpectate()
     spectateTarget = nil
 end
 
-PlayerTab:AddButton({
-    Name = "👁 Spectate Player",
-    Callback = function()
-        if isShutdown then return end
-        if not spectateTarget then
-            OrionLib:MakeNotification({Name="Teleport", Content="Pilih player dulu!", Time=3})
-            return
-        end
-        startSpectate(spectateTarget)
-        OrionLib:MakeNotification({Name="Teleport", Content="Spectating: "..spectateTarget.Name, Time=3})
+local function destroyTeleportPanel()
+    if teleportPanel then
+        pcall(function() teleportPanel:Destroy() end)
+        teleportPanel = nil
     end
-})
+    for _, c in ipairs(teleportConns) do
+        pcall(function() c:Disconnect() end)
+    end
+    teleportConns = {}
+end
 
-PlayerTab:AddButton({
-    Name = "🎯 Teleport to Player",
-    Callback = function()
-        if isShutdown then return end
-        if not spectateTarget then
-            OrionLib:MakeNotification({Name="Teleport", Content="Pilih player dulu!", Time=3})
-            return
+local function buildTeleportPanel()
+    destroyTeleportPanel()
+
+    local pg = LocalPlayer:WaitForChild("PlayerGui")
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "BianTeleportPanel"
+    sg.ResetOnSpawn = false
+    sg.IgnoreGuiInset = true
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.DisplayOrder = 999999
+    sg.Parent = pg
+    teleportPanel = sg
+
+    local frame = Instance.new("Frame")
+    frame.Name = "Main"
+    frame.Size = UDim2.new(0, 270, 0, 340)
+    frame.Position = UDim2.new(0, 15, 0, 90)
+    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    frame.BackgroundTransparency = 0.05
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Parent = sg
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(80, 80, 100)
+    stroke.Thickness = 1
+    stroke.Parent = frame
+
+    -- Header
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 36)
+    header.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    header.BorderSizePixel = 0
+    header.Parent = frame
+
+    local hCorner = Instance.new("UICorner")
+    hCorner.CornerRadius = UDim.new(0, 10)
+    hCorner.Parent = header
+
+    -- Tutup sudut bawah header biar rata
+    local hFix = Instance.new("Frame")
+    hFix.Size = UDim2.new(1, 0, 0, 10)
+    hFix.Position = UDim2.new(0, 0, 1, -10)
+    hFix.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    hFix.BorderSizePixel = 0
+    hFix.Parent = header
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "Teleport / Spectate"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 15
+    title.Font = Enum.Font.SourceSansBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
+
+    -- Header drag
+    do
+        local dragging, dragInput, dragStart, startPos
+
+        header.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = frame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+
+        header.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
+        end)
+
+        local dragConn = UIS.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - dragStart
+                frame.Position = UDim2.new(
+                    startPos.X.Scale, startPos.X.Offset + delta.X,
+                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                )
+            end
+        end)
+        table.insert(teleportConns, dragConn)
+    end
+
+    -- Scroll list
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Name = "PlayerList"
+    scroll.Size = UDim2.new(1, -10, 1, -95)
+    scroll.Position = UDim2.new(0, 5, 0, 42)
+    scroll.BackgroundTransparency = 1
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 3
+    scroll.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 140)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.Parent = frame
+
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 4)
+    layout.Parent = scroll
+
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 4)
+    end)
+
+    local function rebuildList()
+        if not teleportPanel then return end
+        for _, ch in ipairs(scroll:GetChildren()) do
+            if ch:IsA("Frame") then ch:Destroy() end
         end
-        local char = LocalPlayer.Character
-        local targetChar = spectateTarget.Character
-        if char and targetChar then
-            local myHrp = char:FindFirstChild("HumanoidRootPart")
-            local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
-            if myHrp and targetHrp then
-                myHrp.CFrame = targetHrp.CFrame + Vector3.new(0, 3, 0)
-                OrionLib:MakeNotification({Name="Teleport", Content="Teleported to "..spectateTarget.Name, Time=3})
+
+        local count = 0
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                count = count + 1
+
+                local row = Instance.new("Frame")
+                row.Size = UDim2.new(1, -4, 0, 32)
+                row.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
+                row.BorderSizePixel = 0
+                row.LayoutOrder = count
+                row.Parent = scroll
+
+                local rc = Instance.new("UICorner")
+                rc.CornerRadius = UDim.new(0, 6)
+                rc.Parent = row
+
+                local nameLbl = Instance.new("TextLabel")
+                nameLbl.Size = UDim2.new(1, -130, 1, 0)
+                nameLbl.Position = UDim2.new(0, 8, 0, 0)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.Text = p.Name
+                nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+                nameLbl.TextSize = 13
+                nameLbl.Font = Enum.Font.SourceSans
+                nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+                nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+                nameLbl.Parent = row
+
+                local specBtn = Instance.new("TextButton")
+                specBtn.Size = UDim2.new(0, 55, 1, -8)
+                specBtn.Position = UDim2.new(1, -120, 0, 4)
+                specBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 220)
+                specBtn.BorderSizePixel = 0
+                specBtn.Text = "Spec"
+                specBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                specBtn.TextSize = 13
+                specBtn.Font = Enum.Font.SourceSansBold
+                specBtn.AutoButtonColor = true
+                specBtn.Parent = row
+
+                local sc = Instance.new("UICorner")
+                sc.CornerRadius = UDim.new(0, 4)
+                sc.Parent = specBtn
+
+                local tpBtn = Instance.new("TextButton")
+                tpBtn.Size = UDim2.new(0, 55, 1, -8)
+                tpBtn.Position = UDim2.new(1, -60, 0, 4)
+                tpBtn.BackgroundColor3 = Color3.fromRGB(50, 170, 90)
+                tpBtn.BorderSizePixel = 0
+                tpBtn.Text = "TP"
+                tpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                tpBtn.TextSize = 13
+                tpBtn.Font = Enum.Font.SourceSansBold
+                tpBtn.AutoButtonColor = true
+                tpBtn.Parent = row
+
+                local tc = Instance.new("UICorner")
+                tc.CornerRadius = UDim.new(0, 4)
+                tc.Parent = tpBtn
+
+                specBtn.MouseButton1Click:Connect(function()
+                    if isShutdown then return end
+                    local char = p.Character
+                    if not char then return end
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        Camera.CameraSubject = hum
+                        spectateTarget = p
+                        OrionLib:MakeNotification({Name = "Teleport", Content = "Spectating: " .. p.Name, Time = 2})
+                    end
+                end)
+
+                tpBtn.MouseButton1Click:Connect(function()
+                    if isShutdown then return end
+                    local myChar = LocalPlayer.Character
+                    local tChar = p.Character
+                    if myChar and tChar then
+                        local myHrp = myChar:FindFirstChild("HumanoidRootPart")
+                        local tHrp = tChar:FindFirstChild("HumanoidRootPart")
+                        if myHrp and tHrp then
+                            myHrp.CFrame = tHrp.CFrame + Vector3.new(0, 3, 0)
+                            OrionLib:MakeNotification({Name = "Teleport", Content = "Teleported to " .. p.Name, Time = 2})
+                        end
+                    end
+                end)
             end
         end
-    end
-})
 
-PlayerTab:AddButton({
-    Name = "❌ Cancel Spectate",
-    Callback = function()
+        if count == 0 then
+            local empty = Instance.new("TextLabel")
+            empty.Size = UDim2.new(1, -10, 0, 40)
+            empty.BackgroundTransparency = 1
+            empty.Text = "Tidak ada player lain"
+            empty.TextColor3 = Color3.fromRGB(180, 180, 180)
+            empty.TextSize = 14
+            empty.Font = Enum.Font.SourceSansItalic
+            empty.Parent = scroll
+        end
+    end
+
+    rebuildList()
+
+    -- Cancel button
+    local cancelBtn = Instance.new("TextButton")
+    cancelBtn.Name = "CancelBtn"
+    cancelBtn.Size = UDim2.new(1, -20, 0, 34)
+    cancelBtn.Position = UDim2.new(0, 10, 1, -42)
+    cancelBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    cancelBtn.BorderSizePixel = 0
+    cancelBtn.Text = "✕ Cancel / Close"
+    cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    cancelBtn.TextSize = 14
+    cancelBtn.Font = Enum.Font.SourceSansBold
+    cancelBtn.AutoButtonColor = true
+    cancelBtn.Parent = frame
+
+    local cc = Instance.new("UICorner")
+    cc.CornerRadius = UDim.new(0, 6)
+    cc.Parent = cancelBtn
+
+    cancelBtn.MouseButton1Click:Connect(function()
+        pcall(stopSpectate)
+        destroyTeleportPanel()
+        teleportEnabled = false
+        if teleportToggleRef then
+            pcall(function() teleportToggleRef:Set(false) end)
+        end
+        OrionLib:MakeNotification({Name = "Teleport", Content = "Panel ditutup", Time = 2})
+    end)
+
+    -- Auto refresh
+    table.insert(teleportConns, Players.PlayerAdded:Connect(function()
+        task.wait(0.2)
+        rebuildList()
+    end))
+    table.insert(teleportConns, Players.PlayerRemoving:Connect(function()
+        task.wait(0.2)
+        rebuildList()
+    end))
+end
+
+teleportToggleRef = PlayerTab:AddToggle({
+    Name = "Teleport / Spectate Panel",
+    Default = false, Save = false, Flag = "TP_Panel_Toggle",
+    Callback = function(state)
         if isShutdown then return end
-        stopSpectate()
-        OrionLib:MakeNotification({Name="Teleport", Content="Spectate dibatalkan", Time=3})
+        teleportEnabled = state
+        if state then
+            buildTeleportPanel()
+        else
+            pcall(stopSpectate)
+            destroyTeleportPanel()
+        end
     end
 })
 
 -- =====================================================================
--- SECTION 17: MISC TAB - INFINITE JUMP (MOBILE-FIXED)
+-- SECTION 17: INFINITE JUMP
 -- =====================================================================
 local jumpButtonHeld = false
 local spaceHeld = false
@@ -759,7 +980,8 @@ track(LocalPlayer.CharacterAdded:Connect(function()
 end))
 
 MiscTab:AddToggle({
-    Name = "Infinite Jump", Default = false, Save = true, Flag = "InfJump_Toggle",
+    Name = "Infinite Jump",
+    Default = false, Save = true, Flag = "InfJump_Toggle",
     Callback = function(state)
         if isShutdown then return end
         infJumpEnabled = state
@@ -773,7 +995,7 @@ MiscTab:AddToggle({
 })
 
 -- =====================================================================
--- SECTION 18: MISC TAB - ANTI AFK
+-- SECTION 18: ANTI-AFK
 -- =====================================================================
 track(LocalPlayer.Idled:Connect(function()
     if isShutdown or not antiAfkEnabled then return end
@@ -783,7 +1005,8 @@ track(LocalPlayer.Idled:Connect(function()
 end))
 
 MiscTab:AddToggle({
-    Name = "Anti-AFK", Default = false, Save = true, Flag = "AntiAfk_Toggle",
+    Name = "Anti-AFK",
+    Default = false, Save = true, Flag = "AntiAfk_Toggle",
     Callback = function(state)
         if isShutdown then return end
         antiAfkEnabled = state
@@ -791,7 +1014,7 @@ MiscTab:AddToggle({
 })
 
 -- =====================================================================
--- SECTION 19: MISC TAB - FULLBRIGHT
+-- SECTION 19: FULLBRIGHT
 -- =====================================================================
 local originalLighting = {
     Brightness = Lighting.Brightness,
@@ -818,7 +1041,8 @@ local function disableFullbright()
 end
 
 MiscTab:AddToggle({
-    Name = "Fullbright", Default = false, Save = true, Flag = "Fullbright_Toggle",
+    Name = "Fullbright",
+    Default = false, Save = true, Flag = "Fullbright_Toggle",
     Callback = function(state)
         if isShutdown then return end
         fullbrightEnabled = state
@@ -833,15 +1057,22 @@ local function shutdown()
     if isShutdown then return end
     isShutdown = true
 
-    espEnabled, lineEnabled, nameEnabled = false, false, false
-    walkSpeedEnabled, jumpPowerEnabled = false, false
-    infJumpEnabled, noclipEnabled = false, false
+    espEnabled = false
+    lineEnabled = false
+    nameEnabled = false
+    walkSpeedEnabled = false
+    jumpPowerEnabled = false
+    infJumpEnabled = false
+    noclipEnabled = false
     flyEnabled = false
-    antiAfkEnabled, fullbrightEnabled, infStaminaEnabled = false, false, false
+    antiAfkEnabled = false
+    fullbrightEnabled = false
+    infStaminaEnabled = false
 
     pcall(stopFly)
     pcall(stopSpectate)
     pcall(disableFullbright)
+    pcall(destroyTeleportPanel)
 
     for _, hl in pairs(espCache) do
         pcall(function() if hl then hl:Destroy() end end)
@@ -875,9 +1106,9 @@ local function shutdown()
 end
 
 MiscTab:AddButton({
-    Name = "🛑 Shutdown (Matikan Semua)",
+    Name = "Shutdown (Matikan Semua)",
     Callback = function()
-        OrionLib:MakeNotification({Name="Shutdown", Content="Mematikan semua fitur...", Time=2})
+        OrionLib:MakeNotification({Name = "Shutdown", Content = "Mematikan semua fitur...", Time = 2})
         task.wait(0.3)
         shutdown()
     end
