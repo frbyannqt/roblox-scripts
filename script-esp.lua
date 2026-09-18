@@ -425,8 +425,9 @@ track(LocalPlayer.CharacterAdded:Connect(function()
     applyJumpPower()
 end))
 
+-- ---------- WALKSPEED ----------
 PlayerTab:AddSlider({
-    Name = "WalkSpeed",
+    Name = "WalkSpeed (Slider - PC)",
     Min = 16,
     Max = 200,
     Default = 16,
@@ -438,6 +439,20 @@ PlayerTab:AddSlider({
         if isShutdown then return end
         walkSpeedValue = value
         if walkSpeedEnabled then applyWalkSpeed() end
+    end
+})
+
+PlayerTab:AddTextbox({
+    Name = "WalkSpeed (Input - Mobile)",
+    Default = "16",
+    TextDisappear = false,
+    Callback = function(text)
+        if isShutdown then return end
+        local num = tonumber(text)
+        if num then
+            walkSpeedValue = math.clamp(num, 1, 500)
+            if walkSpeedEnabled then applyWalkSpeed() end
+        end
     end
 })
 
@@ -453,8 +468,9 @@ PlayerTab:AddToggle({
     end
 })
 
+-- ---------- JUMPPOWER ----------
 PlayerTab:AddSlider({
-    Name = "JumpPower",
+    Name = "JumpPower (Slider - PC)",
     Min = 50,
     Max = 300,
     Default = 50,
@@ -469,6 +485,20 @@ PlayerTab:AddSlider({
     end
 })
 
+PlayerTab:AddTextbox({
+    Name = "JumpPower (Input - Mobile)",
+    Default = "50",
+    TextDisappear = false,
+    Callback = function(text)
+        if isShutdown then return end
+        local num = tonumber(text)
+        if num then
+            jumpPowerValue = math.clamp(num, 1, 1000)
+            if jumpPowerEnabled then applyJumpPower() end
+        end
+    end
+})
+
 PlayerTab:AddToggle({
     Name = "Enable JumpPower",
     Default = false,
@@ -480,7 +510,6 @@ PlayerTab:AddToggle({
         applyJumpPower()
     end
 })
-
 -- =====================================================================
 -- SECTION 13: PLAYER TAB - INFINITE STAMINA
 -- =====================================================================
