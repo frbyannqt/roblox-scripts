@@ -1,7 +1,28 @@
--- 1. Load Library Orion
+-- =====================================================================
+-- BIAN SCRIPT - UNIVERSAL ESP + UTILS
+-- Library: Orion (github.com/jensonhirst/Orion)
+-- Support: Delta Mobile & PC
+-- =====================================================================
+
+-- =====================================================================
+-- SECTION 1: SERVICES & CONSTANTS
+-- =====================================================================
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local UIS               = game:GetService("UserInputService")
+local CAS               = game:GetService("ContextActionService")
+local Lighting          = game:GetService("Lighting")
+local VirtualUser       = game:GetService("VirtualUser")
+local CoreGui           = game:GetService("CoreGui")
+
+local LocalPlayer       = Players.LocalPlayer
+local Camera            = workspace.CurrentCamera
+
+-- =====================================================================
+-- SECTION 2: LOAD ORION
+-- =====================================================================
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source'))()
 
--- 2. Buat Window
 local Window = OrionLib:MakeWindow({
     Name = "Bian Script",
     HidePremium = false,
@@ -10,12 +31,11 @@ local Window = OrionLib:MakeWindow({
     IntroEnabled = false
 })
 
--- 3. Perkecil window + drag support (PC & Mobile)
+-- =====================================================================
+-- SECTION 3: WINDOW RESIZE + DRAG (MOBILE & PC)
+-- =====================================================================
 task.spawn(function()
     task.wait(0.3)
-    local UIS = game:GetService("UserInputService")
-    local CoreGui = game:GetService("CoreGui")
-
     local orionGui = CoreGui:FindFirstChild("Orion")
     if not orionGui then return end
 
@@ -28,7 +48,7 @@ task.spawn(function()
     end
     if not Main then return end
 
-    Main.Size = UDim2.new(0, 460, 0, 300)
+    Main.Size = UDim2.new(0, 460, 0, 320)
 
     local topbar
     for _, v in pairs(Main:GetDescendants()) do
@@ -41,18 +61,7 @@ task.spawn(function()
 
     topbar.Active = true
 
-    local dragging = false
-    local dragInput, dragStart, startPos
-
-    local function updateDrag(input)
-        local delta = input.Position - dragStart
-        Main.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
+    local dragging, dragInput, dragStart, startPos
 
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -78,14 +87,26 @@ task.spawn(function()
 
     UIS.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
-            updateDrag(input)
+            local delta = input.Position - dragStart
+            Main.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
         end
     end)
 end)
 
--- 4. Buat Tab
+-- =====================================================================
+-- SECTION 4: TABS
+-- =====================================================================
 local VisualsTab = Window:MakeTab({
     Name = "Visuals",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local PlayerTab = Window:MakeTab({
+    Name = "Player",
     Icon = "rbxassetid://4483345998",
     PremiumOnly = false
 })
@@ -96,29 +117,43 @@ local MiscTab = Window:MakeTab({
     PremiumOnly = false
 })
 
--- 5. Variabel & Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local CAS = game:GetService("ContextActionService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+-- =====================================================================
+-- SECTION 5: STATE & TRACKING
+-- =====================================================================
+-- ESP state
+local espEnabled        = false
+local lineEnabled       = false
+local linePosition      = "Bottom"
+local nameEnabled       = false
 
-local espEnabled = false
-local lineEnabled = false
-local linePosition = "Bottom"
-local infJumpEnabled = false
-local espCache = {}
-local lineCache = {}
-local connections = {}
-local isShutdown = false
+-- Player mod state
+local walkSpeedEnabled  = false
+local walkSpeedValue    = 16
+local jumpPowerEnabled  = false
+local jumpPowerValue    = 50
+local infJumpEnabled    = false
+
+-- Misc state
+local antiAfkEnabled    = false
+local fullbrightEnabled = false
+local infStaminaEnabled = false
+local infStaminaValue   = 1000000
+
+-- Cache & connections
+local espCache          = {}
+local nameCache         = {}
+local lineCache         = {}
+local connections       = {}
+local isShutdown        = false
 
 local function track(conn)
     table.insert(connections, conn)
     return conn
 end
 
--- 6. ESP Highlight
+-- =====================================================================
+-- SECTION 6: ESP HIGHLIGHT
+-- =====================================================================
 local function applyESP(player)
     if isShutdown then return end
     if player == LocalPlayer then return end
@@ -148,7 +183,51 @@ local function removeESP(player)
     end
 end
 
--- 7. ESP Line
+-- =====================================================================
+-- SECTION 7: ESP PLAYER NAME
+-- =====================================================================
+local function applyName(player)
+    if isShutdown then return end
+    if player == LocalPlayer then return end
+    if nameCache[player] then return end
+
+    local character = player.Character
+    if not character then return end
+    local head = character:FindFirstChild("Head")
+    if not head then return end
+
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "ESP_Name"
+    bb.Adornee = head
+    bb.Size = UDim2.new(0, 200, 0, 30)
+    bb.StudsOffset = Vector3.new(0, 2.5, 0)
+    bb.AlwaysOnTop = true
+    bb.Parent = character
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = player.Name
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeTransparency = 0.3
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.TextSize = 18
+    label.Font = Enum.Font.SourceSansBold
+    label.Parent = bb
+
+    nameCache[player] = bb
+end
+
+local function removeName(player)
+    if nameCache[player] then
+        pcall(function() nameCache[player]:Destroy() end)
+        nameCache[player] = nil
+    end
+end
+
+-- =====================================================================
+-- SECTION 8: ESP LINE (TRACER)
+-- =====================================================================
 local function getLine(player)
     if lineCache[player] then return lineCache[player] end
     local line = Drawing.new("Line")
@@ -167,7 +246,9 @@ local function removeLine(player)
     end
 end
 
--- 8. Loop Update ESP
+-- =====================================================================
+-- SECTION 9: MAIN RENDER LOOP
+-- =====================================================================
 track(RunService.RenderStepped:Connect(function()
     if isShutdown then return end
 
@@ -176,11 +257,22 @@ track(RunService.RenderStepped:Connect(function()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer then
                 if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    if not espCache[player] then
-                        applyESP(player)
-                    end
+                    if not espCache[player] then applyESP(player) end
                 else
                     removeESP(player)
+                end
+            end
+        end
+    end
+
+    -- ESP Name
+    if nameEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                if player.Character and player.Character:FindFirstChild("Head") then
+                    if not nameCache[player] then applyName(player) end
+                else
+                    removeName(player)
                 end
             end
         end
@@ -218,20 +310,27 @@ track(RunService.RenderStepped:Connect(function()
     end
 end))
 
--- 9. Player Join / Leave
+-- =====================================================================
+-- SECTION 10: PLAYER JOIN / LEAVE HANDLERS
+-- =====================================================================
 track(Players.PlayerAdded:Connect(function(player)
     track(player.CharacterAdded:Connect(function()
         task.wait(0.5)
-        if espEnabled and not isShutdown then applyESP(player) end
+        if isShutdown then return end
+        if espEnabled then applyESP(player) end
+        if nameEnabled then applyName(player) end
     end))
 end))
 
 track(Players.PlayerRemoving:Connect(function(player)
     removeESP(player)
+    removeName(player)
     removeLine(player)
 end))
 
--- 10. Toggle ESP Highlight
+-- =====================================================================
+-- SECTION 11: VISUALS TAB - ESP CONTROLS
+-- =====================================================================
 VisualsTab:AddToggle({
     Name = "ESP Highlight",
     Default = false,
@@ -240,22 +339,34 @@ VisualsTab:AddToggle({
     Callback = function(state)
         if isShutdown then return end
         espEnabled = state
-
         if state then
-            for _, player in ipairs(Players:GetPlayers()) do
-                applyESP(player)
-            end
+            for _, player in ipairs(Players:GetPlayers()) do applyESP(player) end
             OrionLib:MakeNotification({Name = "ESP", Content = "ESP Highlight Aktif!", Time = 3})
         else
-            for player, _ in pairs(espCache) do
-                removeESP(player)
-            end
+            for player, _ in pairs(espCache) do removeESP(player) end
             OrionLib:MakeNotification({Name = "ESP", Content = "ESP Highlight Nonaktif.", Time = 3})
         end
     end
 })
 
--- 11. Toggle ESP Line
+VisualsTab:AddToggle({
+    Name = "ESP Name",
+    Default = false,
+    Save = true,
+    Flag = "Name_Toggle",
+    Callback = function(state)
+        if isShutdown then return end
+        nameEnabled = state
+        if state then
+            for _, player in ipairs(Players:GetPlayers()) do applyName(player) end
+            OrionLib:MakeNotification({Name = "ESP", Content = "ESP Name Aktif!", Time = 3})
+        else
+            for player, _ in pairs(nameCache) do removeName(player) end
+            OrionLib:MakeNotification({Name = "ESP", Content = "ESP Name Nonaktif.", Time = 3})
+        end
+    end
+})
+
 VisualsTab:AddToggle({
     Name = "ESP Line (Tracer)",
     Default = false,
@@ -264,19 +375,15 @@ VisualsTab:AddToggle({
     Callback = function(state)
         if isShutdown then return end
         lineEnabled = state
-
         if state then
             OrionLib:MakeNotification({Name = "ESP", Content = "ESP Line Aktif!", Time = 3})
         else
-            for _, line in pairs(lineCache) do
-                line.Visible = false
-            end
+            for _, line in pairs(lineCache) do line.Visible = false end
             OrionLib:MakeNotification({Name = "ESP", Content = "ESP Line Nonaktif.", Time = 3})
         end
     end
 })
 
--- 12. Dropdown Posisi Line
 VisualsTab:AddDropdown({
     Name = "Line Position",
     Default = "Bottom",
@@ -289,44 +396,198 @@ VisualsTab:AddDropdown({
     end
 })
 
--- 13. ===== INFINITE JUMP (MOBILE-FIXED) =====
-local jumpHeld = false
+-- =====================================================================
+-- SECTION 12: PLAYER TAB - WALKSPEED & JUMPPOWER
+-- =====================================================================
+local function applyWalkSpeed()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.WalkSpeed = walkSpeedEnabled and walkSpeedValue or 16
+    end
+end
 
--- Deteksi kalau tombol jump (mobile atau PC) ditahan
+local function applyJumpPower()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.UseJumpPower = true
+        hum.JumpPower = jumpPowerEnabled and jumpPowerValue or 50
+    end
+end
+
+track(LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    if isShutdown then return end
+    applyWalkSpeed()
+    applyJumpPower()
+end))
+
+PlayerTab:AddSlider({
+    Name = "WalkSpeed",
+    Min = 16,
+    Max = 200,
+    Default = 16,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "studs",
+    Flag = "WS_Slider",
+    Callback = function(value)
+        if isShutdown then return end
+        walkSpeedValue = value
+        if walkSpeedEnabled then applyWalkSpeed() end
+    end
+})
+
+PlayerTab:AddToggle({
+    Name = "Enable WalkSpeed",
+    Default = false,
+    Save = true,
+    Flag = "WS_Toggle",
+    Callback = function(state)
+        if isShutdown then return end
+        walkSpeedEnabled = state
+        applyWalkSpeed()
+    end
+})
+
+PlayerTab:AddSlider({
+    Name = "JumpPower",
+    Min = 50,
+    Max = 300,
+    Default = 50,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 1,
+    ValueName = "power",
+    Flag = "JP_Slider",
+    Callback = function(value)
+        if isShutdown then return end
+        jumpPowerValue = value
+        if jumpPowerEnabled then applyJumpPower() end
+    end
+})
+
+PlayerTab:AddToggle({
+    Name = "Enable JumpPower",
+    Default = false,
+    Save = true,
+    Flag = "JP_Toggle",
+    Callback = function(state)
+        if isShutdown then return end
+        jumpPowerEnabled = state
+        applyJumpPower()
+    end
+})
+
+-- =====================================================================
+-- SECTION 13: PLAYER TAB - INFINITE STAMINA
+-- =====================================================================
+local function findStaminaValue()
+    local char = LocalPlayer.Character
+    -- Cek folder Data
+    local data = LocalPlayer:FindFirstChild("Data")
+    if data then
+        local stamina = data:FindFirstChild("Stamina")
+        if stamina and stamina:IsA("ValueBase") then return stamina end
+    end
+    -- Cek leaderstats
+    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+    if leaderstats then
+        local stamina = leaderstats:FindFirstChild("Stamina")
+        if stamina and stamina:IsA("ValueBase") then return stamina end
+    end
+    return nil
+end
+
+track(RunService.Heartbeat:Connect(function()
+    if isShutdown or not infStaminaEnabled then return end
+    local stamina = findStaminaValue()
+    if stamina then
+        pcall(function() stamina.Value = infStaminaValue end)
+    end
+end))
+
+PlayerTab:AddToggle({
+    Name = "Infinite Stamina",
+    Default = false,
+    Save = true,
+    Flag = "Stamina_Toggle",
+    Callback = function(state)
+        if isShutdown then return end
+        infStaminaEnabled = state
+        if state then
+            OrionLib:MakeNotification({Name = "Player", Content = "Infinite Stamina Aktif!", Time = 3})
+        else
+            OrionLib:MakeNotification({Name = "Player", Content = "Infinite Stamina Nonaktif.", Time = 3})
+        end
+    end
+})
+
+-- =====================================================================
+-- SECTION 14: MISC TAB - INFINITE JUMP (MOBILE-FIXED)
+-- =====================================================================
+-- Pendekatan: deteksi touch di tombol jump bawaan Roblox (TouchGui)
+-- lalu loop Humanoid.Jump = true selama tombol ditahan.
+local jumpButtonHeld = false
+local jumpButtonConnection = nil
+
+local function setupJumpButton()
+    pcall(function()
+        local playerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+        if not playerGui then return end
+        local touchGui = playerGui:WaitForChild("TouchGui", 5)
+        if not touchGui then return end
+        local touchControlFrame = touchGui:WaitForChild("TouchControlFrame", 5)
+        if not touchControlFrame then return end
+        local jumpButton = touchControlFrame:WaitForChild("JumpButton", 5)
+        if not jumpButton then return end
+
+        if jumpButtonConnection then jumpButtonConnection:Disconnect() end
+
+        jumpButtonConnection = jumpButton.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                jumpButtonHeld = true
+            end
+        end)
+
+        jumpButton.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                jumpButtonHeld = false
+            end
+        end)
+    end)
+end
+
+-- Fallback buat PC: Space held
+local spaceHeld = false
 track(UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if isShutdown or not infJumpEnabled then return end
-
-    -- Cek input jump dari touch (mobile) atau Space (PC)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        -- Cek apakah yang disentuh itu tombol jump bawaan Roblox
-        if input.KeyCode == Enum.KeyCode.ButtonA or input.KeyCode == Enum.KeyCode.Space then
-            jumpHeld = true
-        end
-    elseif input.KeyCode == Enum.KeyCode.Space then
-        jumpHeld = true
-    end
+    if input.KeyCode == Enum.KeyCode.Space then spaceHeld = true end
 end))
-
 track(UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        jumpHeld = false
-    elseif input.KeyCode == Enum.KeyCode.Space then
-        jumpHeld = false
-    end
+    if input.KeyCode == Enum.KeyCode.Space then spaceHeld = false end
 end))
 
--- Loop utama: selama tombol ditahan, paksa Humanoid masuk state Jumping
+-- Loop infinite jump
 track(RunService.RenderStepped:Connect(function()
-    if isShutdown or not infJumpEnabled or not jumpHeld then return end
+    if isShutdown or not infJumpEnabled then return end
+    if not (jumpButtonHeld or spaceHeld) then return end
 
     local char = LocalPlayer.Character
     if not char then return end
-
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum and hum.Health > 0 then
-        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        hum.Jump = true
     end
+end))
+
+-- Re-setup jump button setiap respawn
+track(LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    if isShutdown then return end
+    setupJumpButton()
 end))
 
 MiscTab:AddToggle({
@@ -337,52 +598,141 @@ MiscTab:AddToggle({
     Callback = function(state)
         if isShutdown then return end
         infJumpEnabled = state
-
         if state then
+            setupJumpButton()
             OrionLib:MakeNotification({Name = "Misc", Content = "Infinite Jump Aktif!", Time = 3})
         else
+            jumpButtonHeld = false
+            spaceHeld = false
             OrionLib:MakeNotification({Name = "Misc", Content = "Infinite Jump Nonaktif.", Time = 3})
         end
     end
 })
 
--- 14. ===== SHUTDOWN FUNCTION =====
+-- =====================================================================
+-- SECTION 15: MISC TAB - ANTI AFK
+-- =====================================================================
+track(LocalPlayer.Idled:Connect(function()
+    if isShutdown or not antiAfkEnabled then return end
+    VirtualUser:Button2Down(Vector2.new(0, 0), Camera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), Camera.CFrame)
+end))
+
+MiscTab:AddToggle({
+    Name = "Anti-AFK",
+    Default = false,
+    Save = true,
+    Flag = "AntiAfk_Toggle",
+    Callback = function(state)
+        if isShutdown then return end
+        antiAfkEnabled = state
+        if state then
+            OrionLib:MakeNotification({Name = "Misc", Content = "Anti-AFK Aktif!", Time = 3})
+        else
+            OrionLib:MakeNotification({Name = "Misc", Content = "Anti-AFK Nonaktif.", Time = 3})
+        end
+    end
+})
+
+-- =====================================================================
+-- SECTION 16: MISC TAB - FULLBRIGHT
+-- =====================================================================
+local originalLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    Ambient = Lighting.Ambient,
+    FogEnd = Lighting.FogEnd,
+    GlobalShadows = Lighting.GlobalShadows
+}
+
+local function enableFullbright()
+    Lighting.Brightness = 2
+    Lighting.ClockTime = 14
+    Lighting.Ambient = Color3.fromRGB(200, 200, 200)
+    Lighting.FogEnd = 100000
+    Lighting.GlobalShadows = false
+end
+
+local function disableFullbright()
+    Lighting.Brightness = originalLighting.Brightness
+    Lighting.ClockTime = originalLighting.ClockTime
+    Lighting.Ambient = originalLighting.Ambient
+    Lighting.FogEnd = originalLighting.FogEnd
+    Lighting.GlobalShadows = originalLighting.GlobalShadows
+end
+
+MiscTab:AddToggle({
+    Name = "Fullbright",
+    Default = false,
+    Save = true,
+    Flag = "Fullbright_Toggle",
+    Callback = function(state)
+        if isShutdown then return end
+        fullbrightEnabled = state
+        if state then
+            enableFullbright()
+            OrionLib:MakeNotification({Name = "Misc", Content = "Fullbright Aktif!", Time = 3})
+        else
+            disableFullbright()
+            OrionLib:MakeNotification({Name = "Misc", Content = "Fullbright Nonaktif.", Time = 3})
+        end
+    end
+})
+
+-- =====================================================================
+-- SECTION 17: MISC TAB - SHUTDOWN
+-- =====================================================================
 local function shutdown()
     if isShutdown then return end
     isShutdown = true
 
+    -- Matiin fitur
     espEnabled = false
     lineEnabled = false
+    nameEnabled = false
+    walkSpeedEnabled = false
+    jumpPowerEnabled = false
     infJumpEnabled = false
+    antiAfkEnabled = false
+    fullbrightEnabled = false
+    infStaminaEnabled = false
 
-    -- Unbind ContextActionService
-    pcall(function()
-        CAS:UnbindAction("BianInfiniteJump")
-    end)
+    -- Balikin lighting
+    pcall(function() disableFullbright() end)
 
+    -- Hapus semua visual
     for player, hl in pairs(espCache) do
         pcall(function() if hl then hl:Destroy() end end)
     end
     espCache = {}
+
+    for player, bb in pairs(nameCache) do
+        pcall(function() if bb then bb:Destroy() end end)
+    end
+    nameCache = {}
 
     for player, line in pairs(lineCache) do
         pcall(function() if line then line:Remove() end end)
     end
     lineCache = {}
 
+    -- Unbind jump button
+    pcall(function()
+        if jumpButtonConnection then jumpButtonConnection:Disconnect() end
+    end)
+
+    -- Disconnect semua koneksi
     for _, conn in ipairs(connections) do
         pcall(function() conn:Disconnect() end)
     end
     connections = {}
 
+    -- Hancurin GUI
     pcall(function()
-        if OrionLib and OrionLib.Destroy then
-            OrionLib:Destroy()
-        end
+        if OrionLib and OrionLib.Destroy then OrionLib:Destroy() end
     end)
-
     pcall(function()
-        local CoreGui = game:GetService("CoreGui")
         local orionGui = CoreGui:FindFirstChild("Orion")
         if orionGui then orionGui:Destroy() end
     end)
@@ -390,7 +740,6 @@ local function shutdown()
     print("[Bian Script] Shutdown selesai. Semua fitur dimatikan & GUI dihapus.")
 end
 
--- 15. Tombol Shutdown
 MiscTab:AddButton({
     Name = "🛑 Shutdown (Matikan Semua)",
     Callback = function()
@@ -404,10 +753,8 @@ MiscTab:AddButton({
     end
 })
 
--- 16. Keybind End (PC) buat shutdown
+-- Keybind End (PC)
 track(UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if input.KeyCode == Enum.KeyCode.End then
-        shutdown()
-    end
+    if input.KeyCode == Enum.KeyCode.End then shutdown() end
 end))
