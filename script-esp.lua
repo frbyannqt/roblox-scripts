@@ -96,16 +96,17 @@ local MiscTab = Window:MakeTab({
     PremiumOnly = false
 })
 
--- 5. Variabel
+-- 5. Variabel & Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
+local CAS = game:GetService("ContextActionService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local espEnabled = false
 local lineEnabled = false
-local linePosition = "Bottom"   -- "Bottom" atau "Top"
+local linePosition = "Bottom"
 local infJumpEnabled = false
 local espCache = {}
 local lineCache = {}
@@ -117,7 +118,7 @@ local function track(conn)
     return conn
 end
 
--- 6. Fungsi ESP Highlight
+-- 6. ESP Highlight
 local function applyESP(player)
     if isShutdown then return end
     if player == LocalPlayer then return end
@@ -147,7 +148,7 @@ local function removeESP(player)
     end
 end
 
--- 7. Fungsi ESP Line
+-- 7. ESP Line
 local function getLine(player)
     if lineCache[player] then return lineCache[player] end
     local line = Drawing.new("Line")
@@ -187,7 +188,6 @@ track(RunService.RenderStepped:Connect(function()
 
     -- ESP Line
     if lineEnabled then
-        -- Tentukan titik asal line berdasarkan posisi (Top / Bottom)
         local origin
         if linePosition == "Top" then
             origin = Vector2.new(Camera.ViewportSize.X / 2, 0)
@@ -276,7 +276,7 @@ VisualsTab:AddToggle({
     end
 })
 
--- 12. Dropdown Posisi Line (Top / Bottom)
+-- 12. Dropdown Posisi Line
 VisualsTab:AddDropdown({
     Name = "Line Position",
     Default = "Bottom",
@@ -289,20 +289,24 @@ VisualsTab:AddDropdown({
     end
 })
 
--- 13. ===== INFINITE JUMP =====
--- Cara kerja: setiap kali player nyentuh tombol jump, kita paksa Humanoid
--- masuk ke state Jumping lagi. Jadi selama di udara, dia bisa lompat terus.
-track(UIS.JumpRequest:Connect(function()
+-- 13. ===== INFINITE JUMP (REVISI) =====
+-- Pakai ContextActionService biar ke-detect di semua platform,
+-- termasuk tombol jump bawaan di mobile (Delta).
+local function onJumpAction(actionName, inputState, inputObject)
     if isShutdown or not infJumpEnabled then return end
+    if inputState ~= Enum.UserInputState.Begin then return end
 
     local char = LocalPlayer.Character
     if not char then return end
 
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
+    if hum and hum.Health > 0 then
         hum:ChangeState(Enum.HumanoidStateType.Jumping)
     end
-end))
+end
+
+-- Bind ke aksi CharacterJump bawaan Roblox
+CAS:BindAction("BianInfiniteJump", onJumpAction, false, Enum.PlayerActions.CharacterJump)
 
 MiscTab:AddToggle({
     Name = "Infinite Jump",
@@ -329,6 +333,11 @@ local function shutdown()
     espEnabled = false
     lineEnabled = false
     infJumpEnabled = false
+
+    -- Unbind ContextActionService
+    pcall(function()
+        CAS:UnbindAction("BianInfiniteJump")
+    end)
 
     for player, hl in pairs(espCache) do
         pcall(function() if hl then hl:Destroy() end end)
