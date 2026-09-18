@@ -16,11 +16,9 @@ task.spawn(function()
     local UIS = game:GetService("UserInputService")
     local CoreGui = game:GetService("CoreGui")
 
-    -- Cari GUI Orion
     local orionGui = CoreGui:FindFirstChild("Orion")
     if not orionGui then return end
 
-    -- Cari frame Main (bisa nested)
     local Main
     for _, v in pairs(orionGui:GetDescendants()) do
         if v:IsA("Frame") and v.Name == "Main" then
@@ -30,10 +28,8 @@ task.spawn(function()
     end
     if not Main then return end
 
-    -- Perkecil window
     Main.Size = UDim2.new(0, 460, 0, 300)
 
-    -- Cari topbar buat drag area
     local topbar
     for _, v in pairs(Main:GetDescendants()) do
         if (v:IsA("Frame") or v:IsA("TextButton")) and v.Name == "Topbar" then
@@ -45,7 +41,6 @@ task.spawn(function()
 
     topbar.Active = true
 
-    -- ===== DRAG HANDLER (PC + Mobile) =====
     local dragging = false
     local dragInput, dragStart, startPos
 
@@ -104,17 +99,19 @@ local MiscTab = Window:MakeTab({
 -- 5. Variabel
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local espEnabled = false
 local lineEnabled = false
+local linePosition = "Bottom"   -- "Bottom" atau "Top"
+local infJumpEnabled = false
 local espCache = {}
 local lineCache = {}
-local connections = {}     -- nyimpen semua koneksi biar bisa di-disconnect
-local isShutdown = false   -- guard biar shutdown cuma jalan sekali
+local connections = {}
+local isShutdown = false
 
--- Helper buat track koneksi
 local function track(conn)
     table.insert(connections, conn)
     return conn
@@ -190,7 +187,13 @@ track(RunService.RenderStepped:Connect(function()
 
     -- ESP Line
     if lineEnabled then
-        local screenBottom = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+        -- Tentukan titik asal line berdasarkan posisi (Top / Bottom)
+        local origin
+        if linePosition == "Top" then
+            origin = Vector2.new(Camera.ViewportSize.X / 2, 0)
+        else
+            origin = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+        end
 
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character then
@@ -200,7 +203,7 @@ track(RunService.RenderStepped:Connect(function()
                     local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
 
                     if onScreen and screenPos.Z > 0 then
-                        line.From = screenBottom
+                        line.From = origin
                         line.To = Vector2.new(screenPos.X, screenPos.Y)
                         line.Visible = true
                     else
@@ -273,41 +276,81 @@ VisualsTab:AddToggle({
     end
 })
 
--- 12. ===== SHUTDOWN FUNCTION =====
+-- 12. Dropdown Posisi Line (Top / Bottom)
+VisualsTab:AddDropdown({
+    Name = "Line Position",
+    Default = "Bottom",
+    Options = {"Bottom", "Top"},
+    Save = true,
+    Flag = "Line_Pos",
+    Callback = function(value)
+        if isShutdown then return end
+        linePosition = value
+    end
+})
+
+-- 13. ===== INFINITE JUMP =====
+-- Cara kerja: setiap kali player nyentuh tombol jump, kita paksa Humanoid
+-- masuk ke state Jumping lagi. Jadi selama di udara, dia bisa lompat terus.
+track(UIS.JumpRequest:Connect(function()
+    if isShutdown or not infJumpEnabled then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end))
+
+MiscTab:AddToggle({
+    Name = "Infinite Jump",
+    Default = false,
+    Save = true,
+    Flag = "InfJump_Toggle",
+    Callback = function(state)
+        if isShutdown then return end
+        infJumpEnabled = state
+
+        if state then
+            OrionLib:MakeNotification({Name = "Misc", Content = "Infinite Jump Aktif!", Time = 3})
+        else
+            OrionLib:MakeNotification({Name = "Misc", Content = "Infinite Jump Nonaktif.", Time = 3})
+        end
+    end
+})
+
+-- 14. ===== SHUTDOWN FUNCTION =====
 local function shutdown()
     if isShutdown then return end
     isShutdown = true
 
-    -- Matiin fitur
     espEnabled = false
     lineEnabled = false
+    infJumpEnabled = false
 
-    -- Hapus semua highlight
     for player, hl in pairs(espCache) do
         pcall(function() if hl then hl:Destroy() end end)
     end
     espCache = {}
 
-    -- Hapus semua drawing line
     for player, line in pairs(lineCache) do
         pcall(function() if line then line:Remove() end end)
     end
     lineCache = {}
 
-    -- Disconnect semua koneksi
     for _, conn in ipairs(connections) do
         pcall(function() conn:Disconnect() end)
     end
     connections = {}
 
-    -- Hancurin GUI Orion
     pcall(function()
         if OrionLib and OrionLib.Destroy then
             OrionLib:Destroy()
         end
     end)
 
-    -- Fallback: kalau Destroy() nggak jalan, hapus manual dari CoreGui
     pcall(function()
         local CoreGui = game:GetService("CoreGui")
         local orionGui = CoreGui:FindFirstChild("Orion")
@@ -317,7 +360,7 @@ local function shutdown()
     print("[Bian Script] Shutdown selesai. Semua fitur dimatikan & GUI dihapus.")
 end
 
--- 13. Tombol Shutdown di tab Misc
+-- 15. Tombol Shutdown
 MiscTab:AddButton({
     Name = "🛑 Shutdown (Matikan Semua)",
     Callback = function()
@@ -331,8 +374,7 @@ MiscTab:AddButton({
     end
 })
 
--- 14. Keybind opsional (PC) — tekan tombol End buat shutdown
-local UIS = game:GetService("UserInputService")
+-- 16. Keybind End (PC) buat shutdown
 track(UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.End then
